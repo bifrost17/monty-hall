@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>몬티 홀 문제 · 애니메이션</title>
+<style>
+  :root{
+    --bg:#0f1424; --panel:#1a2138; --panel2:#222b46;
+    --line:#2e3a5e; --text:#e8ecf6; --sub:#9aa6c4;
+    --accent:#5b8cff; --accent2:#3a6bff;
+    --win:#34d399; --lose:#f87171; --gold:#f6c453;
+    --door:#6e4f30; --doorface:#8a6238; --doorface2:#9c7142;
+    --cavity:#0a0d18;
+    --shadow:0 10px 30px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;overflow-x:hidden;}
+  body{
+    font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",
+      "Malgun Gothic",system-ui,sans-serif;
+    background:radial-gradient(1200px 800px at 50% -10%,#1c2746,var(--bg));
+    color:var(--text); min-height:100dvh; display:flex; justify-content:center;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right)
+            env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .app{
+    width:100%; max-width:840px;        /* 폴드 메인(펼침) 화면 폭 */
+    padding:16px 16px 120px; display:flex; flex-direction:column; gap:14px;
+    position:relative;
+  }
+  header{text-align:center;}
+  h1{font-size:1.5rem; margin:0; letter-spacing:-.5px;}
+
+  /* 진행 점 */
+  .dots{display:flex; gap:7px; justify-content:center; margin-top:8px;}
+  .dot{width:9px; height:9px; border-radius:50%; background:var(--line); transition:.3s;}
+  .dot.active{background:var(--accent); box-shadow:0 0 0 4px rgba(91,140,255,.18); transform:scale(1.15);}
+  .dot.done{background:var(--win);}
+
+  /* 안내 바 */
+  .instruction{
+    text-align:center; font-size:1.02rem; line-height:1.5; min-height:2.6em;
+    display:flex; align-items:center; justify-content:center;
+    padding:12px 14px; border-radius:14px;
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--line); box-shadow:var(--shadow);
+    animation:fadeIn .35s ease;
+  }
+  .instruction b{color:var(--gold);}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(-6px);} to{opacity:1; transform:none;}}
+
+  /* ===== 문 무대 (갯수 확정 후 고정) ===== */
+  .stage{
+    display:grid; gap:14px; padding:6px 2px;
+    grid-template-columns:repeat(auto-fill,minmax(104px,1fr));
+  }
+  .door3d{ perspective:800px; cursor:pointer; touch-action:manipulation; }
+  .door3d .cell{
+    position:relative; aspect-ratio:3/4.6; border-radius:12px;
+    transform-style:preserve-3d; transition:transform .2s;
+  }
+  .door3d.tap:active .cell{ transform:scale(.96); }
+
+  /* 문 안쪽(보상) */
+  .frame{
+    position:absolute; inset:0; border-radius:12px; overflow:hidden;
+    background:radial-gradient(120% 120% at 50% 30%,#1b2236,var(--cavity));
+    border:3px solid #11161f;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .frame .reward{ font-size:2.8rem; transform:scale(0); transition:transform .4s .25s cubic-bezier(.3,1.6,.5,1); }
+  .door3d.open .frame .reward{ transform:scale(1); }
+
+  /* 문짝 (좌측 경첩으로 열림) */
+  .panel{
+    position:absolute; inset:0; border-radius:12px;
+    transform-origin:left center; transform:rotateY(0deg);
+    transition:transform .75s cubic-bezier(.45,.05,.2,1), box-shadow .3s;
+    background:
+      linear-gradient(180deg,var(--doorface2),var(--doorface) 60%,var(--door));
+    border:3px solid #4d361d;
+    box-shadow:inset 0 0 0 3px rgba(255,255,255,.05),
+               inset 0 18px 28px rgba(0,0,0,.18);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    backface-visibility:hidden;
+  }
+  .panel::before{ /* 문 패널 장식 */
+    content:""; position:absolute; inset:14px; border-radius:8px;
+    border:2px solid rgba(0,0,0,.18);
+    box-shadow:inset 0 2px 6px rgba(255,255,255,.07);
+  }
+  .panel .num{ font-size:1.05rem; font-weight:700; color:#f0e2cc; z-index:1; }
+  .panel .knob{ position:absolute; right:12px; top:50%; transform:translateY(-50%);
+    width:11px; height:11px; border-radius:50%; background:var(--gold);
+    box-shadow:0 0 0 2px rgba(0,0,0,.3), 0 0 8px rgba(246,196,83,.6); }
+  .door3d.open .panel{ transform:rotateY(-118deg); box-shadow:-12px 0 24px rgba(0,0,0,.5); }
+
+  /* 상태 표시 */
+  .badge{
+    position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    z-index:3; font-size:.7rem; font-weight:800; padding:3px 9px; border-radius:999px;
+    background:rgba(0,0,0,.55); color:#fff; white-space:nowrap; opacity:0;
+    transition:opacity .25s;
+  }
+  .badge.show{opacity:1;}
+  .door3d.picked .panel{ box-shadow:0 0 0 4px var(--accent), 0 0 22px rgba(91,140,255,.55); }
+  .door3d.carset .panel{ box-shadow:0 0 0 4px var(--gold), 0 0 22px rgba(246,196,83,.55); }
+  .door3d.dimmed{ filter:saturate(.5) brightness(.78); }
+  .door3d.win .frame{ box-shadow:inset 0 0 0 4px var(--win), 0 0 30px rgba(52,211,153,.6); }
+  .door3d.lose .frame{ box-shadow:inset 0 0 0 4px var(--lose); }
+  @keyframes shake{10%,90%{transform:translateX(-2px);}20%,80%{transform:translateX(4px);}
+    30%,50%,70%{transform:translateX(-8px);}40%,60%{transform:translateX(8px);}}
+  .door3d.shaking{ animation:shake .6s; }
+  @keyframes bounceWin{0%{transform:scale(1);}30%{transform:scale(1.12);}60%{transform:scale(.96);}100%{transform:scale(1);}}
+  .door3d.bounce{ animation:bounceWin .6s; }
+
+  /* ===== 하단 액션 바 (고정) ===== */
+  .bar{
+    position:fixed; left:0; right:0; bottom:0; z-index:20;
+    display:flex; gap:10px; padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+    background:linear-gradient(180deg,rgba(15,20,36,0),var(--bg) 35%);
+    max-width:840px; margin:0 auto;
+  }
+  .btn{
+    flex:1; padding:16px; border-radius:14px; font-size:1.02rem; font-weight:700;
+    border:1px solid var(--line); background:var(--panel2); color:var(--text);
+    cursor:pointer; touch-action:manipulation; transition:transform .12s, opacity .2s;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn.primary{background:linear-gradient(180deg,var(--accent),var(--accent2));
+    border-color:var(--accent); color:#fff;}
+  .btn.on{background:linear-gradient(180deg,var(--gold),#e0a93a); color:#1a1206; border-color:var(--gold);}
+  .btn:disabled{opacity:.35; cursor:not-allowed;}
+
+  /* ===== 갯수 선택 오버레이 ===== */
+  .overlay{
+    position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
+    background:rgba(8,11,20,.78); backdrop-filter:blur(6px); padding:24px;
+  }
+  .modal{
+    width:100%; max-width:420px; text-align:center;
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--line); border-radius:22px; padding:28px 22px; box-shadow:var(--shadow);
+    animation:pop .35s cubic-bezier(.3,1.4,.5,1);
+  }
+  @keyframes pop{from{opacity:0; transform:scale(.9);} to{opacity:1; transform:none;}}
+  .modal h2{margin:0 0 6px;}
+  .modal p{color:var(--sub); margin:0 0 18px; font-size:.92rem;}
+  .counter{display:flex; align-items:center; justify-content:center; gap:18px;}
+  .counter button{width:60px; height:60px; border-radius:16px; font-size:1.9rem;
+    background:var(--panel2); color:var(--text); border:1px solid var(--line); cursor:pointer;}
+  .counter button:active{transform:scale(.94);}
+  .counter .num{font-size:3rem; font-weight:800; min-width:90px;}
+
+  /* ===== 결과 토스트 ===== */
+  .result{
+    position:fixed; top:18%; left:50%; transform:translateX(-50%) scale(.7);
+    z-index:60; padding:20px 32px; border-radius:20px; font-size:1.7rem; font-weight:900;
+    text-align:center; opacity:0; pointer-events:none; box-shadow:var(--shadow);
+  }
+  .result.show{opacity:1; transform:translateX(-50%) scale(1);
+    transition:transform .5s cubic-bezier(.3,1.5,.5,1), opacity .35s;}
+  .result.win{background:rgba(52,211,153,.18); border:1px solid var(--win); color:var(--win);}
+  .result.lose{background:rgba(248,113,113,.16); border:1px solid var(--lose); color:var(--lose);}
+  .result small{display:block; font-size:.85rem; font-weight:600; color:var(--text); margin-top:6px; opacity:.85;}
+
+  /* 색종이 */
+  .confetti{position:fixed; top:-12px; width:10px; height:14px; z-index:55; pointer-events:none; border-radius:2px;}
+  @keyframes drop{to{transform:translateY(110vh) rotate(720deg); opacity:.9;}}
+
+  .hidden{display:none !important;}
+  @media (max-width:380px){ .stage{grid-template-columns:repeat(auto-fill,minmax(86px,1fr));} h1{font-size:1.3rem;} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🚪 몬티 홀 · 애니메이션</h1>
+    <div class="dots" id="dots"></div>
+  </header>
+  <div class="instruction" id="instruction">시작합니다…</div>
+  <div class="stage" id="stage"></div>
+</div>
+
+<!-- 하단 액션 바 -->
+<div class="bar" id="bar">
+  <button class="btn" id="altBtn" style="display:none"></button>
+  <button class="btn primary" id="mainBtn">다음</button>
+</div>
+
+<!-- 갯수 선택 오버레이 -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2>문의 갯수</h2>
+    <p>문 갯수를 정하면, 이후 화면은 이 문들로 고정됩니다. (최소 3개)</p>
+    <div class="counter">
+      <button id="dec">−</button>
+      <div class="num" id="numDoors">3</div>
+      <button id="inc">＋</button>
+    </div>
+    <button class="btn primary" id="startBtn" style="margin-top:22px;width:100%;">문 생성하기 →</button>
+  </div>
+</div>
+
+<!-- 결과 토스트 -->
+<div class="result" id="result"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const DONKEY = "🫏", CAR = "🚗";
+  const PHASES = ["designate","pick","monty","final","reveal"];
+  const PHASE_LABEL = ["지정","선택","몬티","파이널","정답"];
+
+  const state = { n:3, car:null, pick:null, opened:[], remaining:[],
+                  finalPick:null, strategy:null, phase:null, busy:false,
+                  plays:0, wins:0, mainAction:null, altAction:null };
+
+  // ---- 진행 점 ----
+  function renderDots(){
+    $("dots").innerHTML = PHASE_LABEL.map((_,i)=>{
+      const cur = PHASES.indexOf(state.phase);
+      const cls = i<cur?"done":(i===cur?"active":"");
+      return `<span class="dot ${cls}"></span>`;
+    }).join("");
+  }
+
+  // ---- 문 DOM (한 번 생성 후 고정) ----
+  function buildStage(){
+    const stage = $("stage"); stage.innerHTML = "";
+    for(let i=0;i<state.n;i++){
+      const d = document.createElement("div");
+      d.className = "door3d";
+      d.dataset.i = i;
+      d.innerHTML = `
+        <div class="cell">
+          <div class="frame"><span class="reward">${DONKEY}</span></div>
+          <div class="badge"></div>
+          <div class="panel"><span class="num">${i+1}번</span><span class="knob"></span></div>
+        </div>`;
+      d.addEventListener("click", () => onDoorClick(i));
+      stage.appendChild(d);
+    }
+  }
+  const doorAt = i => $("stage").children[i];
+  function setReward(i, face){ doorAt(i).querySelector(".reward").textContent = face; }
+  function setBadge(i, text){
+    const b = doorAt(i).querySelector(".badge");
+    if(text){ b.textContent = text; b.classList.add("show"); }
+    else { b.classList.remove("show"); }
+  }
+  function openDoor(i, delay=0){
+    setTimeout(()=> doorAt(i).classList.add("open"), delay);
+  }
+  function closeDoor(i){ doorAt(i).classList.remove("open"); }
+  function tappable(set){
+    [...$("stage").children].forEach(d=> d.classList.toggle("tap", set));
+  }
+
+  // ---- 안내/버튼 ----
+  function setInstruction(html){
+    const el = $("instruction");
+    el.style.animation="none"; void el.offsetWidth; el.style.animation="";
+    el.innerHTML = html;
+  }
+  function setMain(label, enabled, action){
+    const b=$("mainBtn");
+    b.textContent = label; b.disabled = !enabled;
+    b.style.display = label ? "" : "none";
+    if(action!==undefined) state.mainAction = action;
+  }
+  function setAlt(label, action){
+    const b=$("altBtn");
+    if(label){ b.style.display=""; b.textContent=label; b.className="btn"; state.altAction=action||null; }
+    else { b.style.display="none"; state.altAction=null; }
+  }
+
+  // ============ 단계 전환 ============
+  function goPhase(p){
+    state.phase = p; renderDots();
+    PHASE_RENDER[p]();
+  }
+
+  const PHASE_RENDER = {
+    // 1) 호스트가 차 위치 지정
+    designate(){
+      state.car=null;
+      [...$("stage").children].forEach(d=>{
+        d.className="door3d tap"; setBadge(+d.dataset.i,"");
+      });
+      setInstruction("호스트: <b>🚗 자동차</b>를 숨길 문을 한 칸 누르세요. 나머지는 모두 🫏 당나귀.");
+      setAlt(null);
+      setMain("참여자에게 넘기기 →", false, ()=>{
+        [...$("stage").children].forEach((d,i)=>{ d.classList.remove("carset"); setReward(i,DONKEY); setBadge(i,""); });
+        goPhase("pick");
+      });
+    },
+    // 2) 참여자 선택
+    pick(){
+      state.pick=null;
+      [...$("stage").children].forEach(d=>{
+        d.classList.remove("carset","picked"); d.classList.add("tap");
+        setBadge(+d.dataset.i,"");
+      });
+      setInstruction("참여자: 문 하나를 고르세요. 차의 위치는 비밀입니다.");
+      setMain("이 문으로 결정 →", false, ()=> goPhase("monty"));
+    },
+    // 3) 몬티가 당나귀 문 개방 (애니메이션)
+    monty(){
+      tappable(false);
+      // 남길 '다른 문' 결정 → 닫힌 문은 내 선택 + other 2개
+      let other;
+      if(state.pick === state.car){
+        const donkeys=[]; for(let i=0;i<state.n;i++) if(i!==state.car) donkeys.push(i);
+        other = donkeys[Math.floor(Math.random()*donkeys.length)];
+      } else { other = state.car; }
+      state.remaining=[state.pick, other].sort((a,b)=>a-b);
+      state.opened=[]; for(let i=0;i<state.n;i++) if(i!==state.pick && i!==other) state.opened.push(i);
+
+      setInstruction("몬티가 당나귀가 든 문을 하나씩 엽니다…");
+      setMain("", false); state.busy=true;
+      // 순차 개방 애니메이션
+      state.opened.forEach((idx,k)=>{
+        setReward(idx, DONKEY);
+        setBadge(idx,"당나귀");
+        openDoor(idx, 250 + k*420);
+        setTimeout(()=> doorAt(idx).classList.add("dimmed"), 250 + k*420 + 750);
+      });
+      const total = 250 + state.opened.length*420 + 800;
+      setTimeout(()=>{
+        state.busy=false;
+        setBadge(state.pick,"내 선택");
+        setInstruction(`닫힌 문은 <b>${state.pick+1}번(내 선택)</b>과 <b>${other+1}번</b> 둘뿐입니다.`);
+        setMain("파이널 선택 →", true, ()=> goPhase("final"));
+      }, total);
+    },
+    // 4) 파이널: 그대로 vs 바꾸기
+    final(){
+      state.finalPick=null; state.strategy=null;
+      const otherDoor = state.remaining.find(i=>i!==state.pick);
+      [...$("stage").children].forEach(d=>{
+        const i=+d.dataset.i;
+        d.classList.toggle("tap", state.remaining.includes(i));
+      });
+      setBadge(state.pick,"내 선택"); setBadge(otherDoor,"바꾸기 후보");
+      setInstruction("<b>그대로 두려면 내 문</b>을, 바꾸려면 다른 문(또는 🔁)을 누르세요.");
+      setAlt("🔁 바꾸기", ()=> chooseFinal(otherDoor));
+      setMain("최종 확인 →", false, ()=>{ if(state.finalPick!=null) goPhase("reveal"); });
+    },
+    // 5) 정답 공개
+    reveal(){
+      tappable(false);
+      const win = state.finalPick === state.car;
+      state.plays++; if(win) state.wins++;
+      setInstruction(win
+        ? `🎉 <b>당첨!</b> 자동차를 얻었습니다.`
+        : `😢 <b>꽝!</b> 당나귀가 나왔어요.`);
+      // 모든 문 정답 세팅 + 순차 개방
+      let order=[]; for(let i=0;i<state.n;i++) if(!state.opened.includes(i)) order.push(i);
+      order.forEach((i,k)=>{
+        setReward(i, i===state.car?CAR:DONKEY);
+        setBadge(i, i===state.finalPick?"최종 선택":(i===state.car?"정답":""));
+        openDoor(i, 150 + k*250);
+      });
+      const last = 150 + order.length*250 + 700;
+      setTimeout(()=> showResult(win), last);
+      setMain("", false); setAlt(null);
+    }
+  };
+
+  // ---- 문 클릭 라우팅 ----
+  function onDoorClick(i){
+    if(state.busy) return;
+    if(state.phase==="designate"){
+      state.car=i;
+      [...$("stage").children].forEach(d=>{
+        const di=+d.dataset.i;
+        d.classList.toggle("carset", di===i);
+        setReward(di, di===i?CAR:DONKEY);
+        setBadge(di, di===i?"차":"");
+      });
+      setMain("참여자에게 넘기기 →", true);
+    }
+    else if(state.phase==="pick"){
+      state.pick=i;
+      [...$("stage").children].forEach(d=>
+        d.classList.toggle("picked", +d.dataset.i===i));
+      setMain("이 문으로 결정 →", true);
+    }
+    else if(state.phase==="final"){
+      if(state.remaining.includes(i)) chooseFinal(i);
+    }
+  }
+
+  function chooseFinal(i){
+    state.finalPick=i;
+    state.strategy = (i===state.pick)?"stay":"switch";
+    [...$("stage").children].forEach(d=>
+      d.classList.toggle("picked", +d.dataset.i===i));
+    $("altBtn").classList.toggle("on", state.strategy==="switch");
+    setInstruction(state.strategy==="switch"
+      ? `<b>${i+1}번</b>으로 <b>바꿉니다</b>. 확인하세요!`
+      : `처음 고른 <b>${i+1}번</b>을 <b>그대로</b> 둡니다. 확인하세요!`);
+    setMain("최종 확인 →", true);
+  }
+
+  // ---- 결과 토스트 + 이펙트 ----
+  function showResult(win){
+    const stayP=(1/state.n*100).toFixed(1), switchP=((state.n-1)/state.n*100).toFixed(1);
+    const usedP = state.strategy==="switch"?switchP:stayP;
+    const r=$("result");
+    r.className = "result "+(win?"win":"lose");
+    r.innerHTML = (win?"🎉 당첨!":"💥 꽝!")+
+      `<small>${state.strategy==="switch"?"바꾸기":"그대로"} · 이론 ${usedP}% · 누적 ${state.wins}/${state.plays}판</small>`;
+    requestAnimationFrame(()=> r.classList.add("show"));
+
+    const fp = doorAt(state.finalPick);
+    if(win){ fp.classList.add("win","bounce"); confetti(); }
+    else {
+      fp.classList.add("lose","shaking");
+      document.body.animate(
+        [{filter:"none"},{filter:"brightness(.7) saturate(1.4)"},{filter:"none"}],
+        {duration:500});
+      if(state.car!=null) doorAt(state.car).classList.add("win");
+    }
+    setTimeout(()=> r.classList.remove("show"), 2600);
+    setAlt("처음부터 ↺", restart);
+    setMain("같은 설정 다시 →", true, ()=>{ resetStage(); goPhase("designate"); });
+  }
+
+  function confetti(){
+    const colors=["#5b8cff","#34d399","#f6c453","#f87171","#c084fc","#fff"];
+    for(let k=0;k<90;k++){
+      const c=document.createElement("div");
+      c.className="confetti";
+      c.style.left=Math.random()*100+"vw";
+      c.style.background=colors[k%colors.length];
+      c.style.transform=`rotate(${Math.random()*360}deg)`;
+      const dur=2+Math.random()*1.6;
+      c.style.animation=`drop ${dur}s cubic-bezier(.3,.6,.5,1) ${Math.random()*.4}s forwards`;
+      document.body.appendChild(c);
+      setTimeout(()=>c.remove(), (dur+0.6)*1000);
+    }
+  }
+
+  // ---- 리셋 (문은 닫는 애니메이션) ----
+  function resetStage(){
+    $("result").classList.remove("show");
+    [...$("stage").children].forEach((d,i)=>{
+      d.className="door3d"; closeDoor(i); setBadge(i,""); setReward(i,DONKEY);
+    });
+    state.car=state.pick=state.finalPick=state.strategy=null;
+    state.opened=[]; state.remaining=[];
+  }
+  function restart(){
+    resetStage(); $("overlay").classList.remove("hidden");
+    setInstruction("시작합니다…"); renderDots();
+  }
+
+  // ---- 버튼: state 액션으로 단일 디스패치 ----
+  $("mainBtn").onclick = () => { if(!$("mainBtn").disabled && state.mainAction) state.mainAction(); };
+  $("altBtn").onclick  = () => { if(state.altAction) state.altAction(); };
+
+  // ---- 갯수 선택 ----
+  $("inc").onclick=()=>{ if(state.n<12){state.n++; $("numDoors").textContent=state.n;} };
+  $("dec").onclick=()=>{ if(state.n>3){state.n--; $("numDoors").textContent=state.n;} };
+  $("startBtn").onclick=()=>{
+    buildStage(); $("overlay").classList.add("hidden"); goPhase("designate");
+  };
+
+  renderDots();
+})();
+</script>
+</body>
+</html>
