@@ -331,8 +331,7 @@
       setTimeout(()=>{
         state.busy=false;
         setBadge(state.pick,"내 선택");
-        setInstruction(`닫힌 문은 <b>${state.pick+1}번(내 선택)</b>과 <b>${other+1}번</b> 둘뿐입니다.`);
-        setMain("파이널 선택 →", true, ()=> goPhase("final"));
+        goPhase("final");   // 중간 버튼 없이 바로 파이널 선택 단계 활성화
       }, total);
     },
     // 4) 파이널: 그대로 vs 바꾸기
