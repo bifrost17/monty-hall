@@ -69,7 +69,7 @@
     border:3px solid #11161f;
     display:flex; align-items:center; justify-content:center;
   }
-  .frame .reward{ font-size:3.8rem; transform:scale(0); transition:transform .4s .25s cubic-bezier(.3,1.6,.5,1); }
+  .frame .reward{ font-size:4.6rem; transform:scale(0); transition:transform .4s .25s cubic-bezier(.3,1.6,.5,1); }
   .door3d.open .frame .reward{ transform:scale(1); }
 
   /* 문짝 (좌측 경첩으로 열림) */
@@ -173,13 +173,13 @@
 
   /* 문이 많을 때 셀 내부 요소 축소 */
   .stage.dense{gap:9px;}
-  .stage.dense .frame .reward{font-size:2.3rem;}
+  .stage.dense .frame .reward{font-size:3rem;}
   .stage.dense .panel .num{font-size:.74rem;}
   .stage.dense .panel .knob{width:7px;height:7px;right:7px;}
   .stage.dense .panel::before{inset:8px;}
   .stage.dense .badge{font-size:.56rem;padding:2px 5px;}
   .stage.vdense{gap:6px;}
-  .stage.vdense .frame .reward{font-size:1.5rem;}
+  .stage.vdense .frame .reward{font-size:2rem;}
   .stage.vdense .panel .num{font-size:.58rem;}
   .stage.vdense .panel::before{inset:5px;border-width:1px;}
   .stage.vdense .panel .knob{display:none;}
@@ -239,7 +239,7 @@
 
   const state = { n:3, car:null, pick:null, opened:[], remaining:[],
                   finalPick:null, strategy:null, phase:null, busy:false,
-                  plays:0, wins:0, mainAction:null, altAction:null };
+                  plays:0, wins:0, mainAction:null, altAction:null, _peek:null };
 
   // ---- 진행 점 ----
   function renderDots(){
@@ -321,7 +321,8 @@
       setInstruction("호스트: <b>🚗 자동차</b>를 숨길 문을 한 칸 누르세요. 나머지는 모두 🫏 당나귀.");
       setAlt(null);
       setMain("참여자에게 넘기기 →", false, ()=>{
-        [...$("stage").children].forEach((d,i)=>{ d.classList.remove("carset"); setReward(i,DONKEY); setBadge(i,""); });
+        clearTimeout(state._peek);
+        [...$("stage").children].forEach((d,i)=>{ d.classList.remove("carset","open"); setReward(i,DONKEY); setBadge(i,""); });
         goPhase("pick");
       });
     },
@@ -411,7 +412,14 @@
         d.classList.toggle("carset", di===i);
         setReward(di, di===i?CAR:DONKEY);
         setBadge(di, di===i?"차":"");
+        if(di!==i) d.classList.remove("open");   // 다른 문은 닫기
       });
+      // 선택한 문을 열었다 닫으며 🚗 가 안에 있음을 보여줌
+      const d = doorAt(i);
+      d.classList.remove("open"); void d.offsetWidth;  // 애니메이션 재시작
+      d.classList.add("open");
+      clearTimeout(state._peek);
+      state._peek = setTimeout(()=> doorAt(i).classList.remove("open"), 1300);
       setMain("참여자에게 넘기기 →", true);
     }
     else if(state.phase==="pick"){
