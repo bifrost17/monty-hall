@@ -105,6 +105,7 @@
   }
   .badge.show{opacity:1;}
   .door3d.picked .panel{ box-shadow:0 0 0 4px var(--accent), 0 0 22px rgba(91,140,255,.55); }
+  .door3d.cand .panel{ box-shadow:0 0 0 4px #c084fc, 0 0 22px rgba(192,132,252,.55); }
   .door3d.carset .panel{ box-shadow:0 0 0 4px var(--gold), 0 0 22px rgba(246,196,83,.55); }
   .door3d.dimmed{ filter:saturate(.5) brightness(.78); }
   .door3d.win .frame{ box-shadow:inset 0 0 0 4px var(--win), 0 0 30px rgba(52,211,153,.6); }
@@ -161,13 +162,28 @@
   }
   .result.show{opacity:1; transform:translateX(-50%) scale(1);
     transition:transform .5s cubic-bezier(.3,1.5,.5,1), opacity .35s;}
-  .result.win{background:rgba(52,211,153,.18); border:1px solid var(--win); color:var(--win);}
-  .result.lose{background:rgba(248,113,113,.16); border:1px solid var(--lose); color:var(--lose);}
-  .result small{display:block; font-size:.85rem; font-weight:600; color:var(--text); margin-top:6px; opacity:.85;}
+  .result.win{background:#10241b; border:2px solid var(--win); color:var(--win);}
+  .result.lose{background:#24130f; border:2px solid var(--lose); color:var(--lose);}
+  .result small{display:block; font-size:.85rem; font-weight:600; color:var(--text); margin-top:6px; opacity:.95;}
 
-  /* 색종이 */
-  .confetti{position:fixed; top:-12px; width:10px; height:14px; z-index:55; pointer-events:none; border-radius:2px;}
-  @keyframes drop{to{transform:translateY(110vh) rotate(720deg); opacity:.9;}}
+  /* 색종이 (불투명 + 큰 입자) */
+  .confetti{position:fixed; top:-20px; width:16px; height:26px; z-index:55; pointer-events:none;
+    border-radius:3px; box-shadow:0 1px 4px rgba(0,0,0,.35);}
+  @keyframes drop{to{transform:translateY(112vh) rotate(720deg);}}
+
+  /* 문이 많을 때 셀 내부 요소 축소 */
+  .stage.dense{gap:9px;}
+  .stage.dense .frame .reward{font-size:1.6rem;}
+  .stage.dense .panel .num{font-size:.74rem;}
+  .stage.dense .panel .knob{width:7px;height:7px;right:7px;}
+  .stage.dense .panel::before{inset:8px;}
+  .stage.dense .badge{font-size:.56rem;padding:2px 5px;}
+  .stage.vdense{gap:6px;}
+  .stage.vdense .frame .reward{font-size:1rem;}
+  .stage.vdense .panel .num{font-size:.58rem;}
+  .stage.vdense .panel::before{inset:5px;border-width:1px;}
+  .stage.vdense .panel .knob{display:none;}
+  .stage.vdense .badge{display:none;}
 
   .hidden{display:none !important;}
   @media (max-width:380px){ .stage{grid-template-columns:repeat(auto-fill,minmax(86px,1fr));} h1{font-size:1.3rem;} }
@@ -193,13 +209,21 @@
 <div class="overlay" id="overlay">
   <div class="modal">
     <h2>문의 갯수</h2>
-    <p>문 갯수를 정하면, 이후 화면은 이 문들로 고정됩니다. (최소 3개)</p>
+    <p>문 갯수를 정하면, 이후 화면은 이 문들로 고정됩니다. (3 ~ 100개)</p>
     <div class="counter">
       <button id="dec">−</button>
       <div class="num" id="numDoors">3</div>
       <button id="inc">＋</button>
     </div>
-    <button class="btn primary" id="startBtn" style="margin-top:22px;width:100%;">문 생성하기 →</button>
+    <input type="range" id="slider" min="3" max="100" value="3" step="1"
+           style="width:100%;margin-top:18px;accent-color:var(--accent);">
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn" id="preset3" style="flex:1;padding:11px;">3</button>
+      <button class="btn" id="preset10" style="flex:1;padding:11px;">10</button>
+      <button class="btn" id="preset50" style="flex:1;padding:11px;">50</button>
+      <button class="btn" id="preset100" style="flex:1;padding:11px;">100</button>
+    </div>
+    <button class="btn primary" id="startBtn" style="margin-top:18px;width:100%;">문 생성하기 →</button>
   </div>
 </div>
 
@@ -229,6 +253,11 @@
   // ---- 문 DOM (한 번 생성 후 고정) ----
   function buildStage(){
     const stage = $("stage"); stage.innerHTML = "";
+    // 문이 많을수록 셀을 작게 → 한 화면에 더 많이 배치
+    const minw = state.n>48 ? 50 : state.n>24 ? 64 : state.n>12 ? 84 : 104;
+    stage.style.gridTemplateColumns = `repeat(auto-fill,minmax(${minw}px,1fr))`;
+    stage.classList.toggle("dense", state.n>12 && state.n<=48);
+    stage.classList.toggle("vdense", state.n>48);
     for(let i=0;i<state.n;i++){
       const d = document.createElement("div");
       d.className = "door3d";
@@ -320,14 +349,14 @@
 
       setInstruction("몬티가 당나귀가 든 문을 하나씩 엽니다…");
       setMain("", false); state.busy=true;
-      // 순차 개방 애니메이션
+      // 순차 개방 애니메이션 (문이 많으면 간격 자동 압축 → 총 ~2.2초 이내)
+      const step = Math.max(16, Math.min(420, Math.round(2200/state.opened.length)));
       state.opened.forEach((idx,k)=>{
-        setReward(idx, DONKEY);
-        setBadge(idx,"당나귀");
-        openDoor(idx, 250 + k*420);
-        setTimeout(()=> doorAt(idx).classList.add("dimmed"), 250 + k*420 + 750);
+        setReward(idx, DONKEY);   // 라벨 없음: 문이 열리면 🫏 가 직접 보임
+        openDoor(idx, 250 + k*step);
+        setTimeout(()=> doorAt(idx).classList.add("dimmed"), 250 + k*step + 600);
       });
-      const total = 250 + state.opened.length*420 + 800;
+      const total = 250 + state.opened.length*step + 800;
       setTimeout(()=>{
         state.busy=false;
         setBadge(state.pick,"내 선택");
@@ -342,6 +371,8 @@
         const i=+d.dataset.i;
         d.classList.toggle("tap", state.remaining.includes(i));
       });
+      doorAt(state.pick).classList.add("picked");   // 파란 글로우 = 그대로
+      doorAt(otherDoor).classList.add("cand");       // 보라 글로우 = 바꾸기 후보
       setBadge(state.pick,"내 선택"); setBadge(otherDoor,"바꾸기 후보");
       setInstruction("<b>그대로 두려면 내 문</b>을, 바꾸려면 다른 문(또는 🔁)을 누르세요.");
       setAlt("🔁 바꾸기", ()=> chooseFinal(otherDoor));
@@ -359,8 +390,10 @@
       let order=[]; for(let i=0;i<state.n;i++) if(!state.opened.includes(i)) order.push(i);
       order.forEach((i,k)=>{
         setReward(i, i===state.car?CAR:DONKEY);
-        setBadge(i, i===state.finalPick?"최종 선택":(i===state.car?"정답":""));
         openDoor(i, 150 + k*250);
+        // 라벨은 문이 열린 뒤에 표시 (정답 스포일러 방지)
+        setTimeout(()=> setBadge(i, i===state.finalPick?"최종 선택":(i===state.car?"정답":"")),
+                   150 + k*250 + 250);
       });
       const last = 150 + order.length*250 + 700;
       setTimeout(()=> showResult(win), last);
@@ -395,8 +428,10 @@
   function chooseFinal(i){
     state.finalPick=i;
     state.strategy = (i===state.pick)?"stay":"switch";
-    [...$("stage").children].forEach(d=>
-      d.classList.toggle("picked", +d.dataset.i===i));
+    [...$("stage").children].forEach(d=>{
+      d.classList.remove("cand");
+      d.classList.toggle("picked", +d.dataset.i===i);
+    });
     $("altBtn").classList.toggle("on", state.strategy==="switch");
     setInstruction(state.strategy==="switch"
       ? `<b>${i+1}번</b>으로 <b>바꿉니다</b>. 확인하세요!`
@@ -429,12 +464,14 @@
   }
 
   function confetti(){
-    const colors=["#5b8cff","#34d399","#f6c453","#f87171","#c084fc","#fff"];
-    for(let k=0;k<90;k++){
+    const colors=["#5b8cff","#34d399","#f6c453","#f87171","#c084fc","#ffffff","#ff8fd0"];
+    for(let k=0;k<140;k++){
       const c=document.createElement("div");
       c.className="confetti";
       c.style.left=Math.random()*100+"vw";
       c.style.background=colors[k%colors.length];
+      const w=12+Math.random()*10;                       // 입자 크기 다양화
+      c.style.width=w+"px"; c.style.height=(w*1.5)+"px";
       c.style.transform=`rotate(${Math.random()*360}deg)`;
       const dur=2+Math.random()*1.6;
       c.style.animation=`drop ${dur}s cubic-bezier(.3,.6,.5,1) ${Math.random()*.4}s forwards`;
@@ -462,8 +499,18 @@
   $("altBtn").onclick  = () => { if(state.altAction) state.altAction(); };
 
   // ---- 갯수 선택 ----
-  $("inc").onclick=()=>{ if(state.n<12){state.n++; $("numDoors").textContent=state.n;} };
-  $("dec").onclick=()=>{ if(state.n>3){state.n--; $("numDoors").textContent=state.n;} };
+  function setN(v){
+    state.n = Math.max(3, Math.min(100, v|0));
+    $("numDoors").textContent = state.n;
+    $("slider").value = state.n;
+  }
+  $("inc").onclick=()=> setN(state.n+1);
+  $("dec").onclick=()=> setN(state.n-1);
+  $("slider").oninput=e=> setN(+e.target.value);
+  $("preset3").onclick=()=> setN(3);
+  $("preset10").onclick=()=> setN(10);
+  $("preset50").onclick=()=> setN(50);
+  $("preset100").onclick=()=> setN(100);
   $("startBtn").onclick=()=>{
     buildStage(); $("overlay").classList.add("hidden"); goPhase("designate");
   };
