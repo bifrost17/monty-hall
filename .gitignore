@@ -1,0 +1,5 @@
+# Codex RE artifacts — recreate with codex-re/fetch.sh
+codex-re/vsix/
+codex-re/extracted/
+codex-re/analysis/extension.beautified.js
+codex-re/notes/
